@@ -16,6 +16,7 @@ let db;
 let eventsCollection;
 
 async function connectToMongoDB() {
+  if (db) return; // Re-use connection if already established
   try {
     await client.connect();
     db = client.db("carevision");
@@ -23,18 +24,21 @@ async function connectToMongoDB() {
     console.log("You successfully connected to MongoDB!");
   } catch (err) {
     console.error("MongoDB connection error:", err);
-    process.exit(1);
   }
 }
+
+// Ensure database connects before handling incoming API routes on serverless
+app.use(async (req, res, next) => {
+  await connectToMongoDB();
+  next();
+});
 
 // POST endpoint to save events to MongoDB
 app.post('/api/events', async (req, res) => {
   try {
-    console.log("Event API called with body:", req.body);
-    
-    const { title, eventType, eventDate, location, thumbnail, description, userEmail } = req.body;
+    const { title, eventType, eventDate, location, imageUrl, description, userEmail } = req.body;
 
-    if (!title || !eventType || !eventDate || !location || !description) {
+    if (!title || !eventType || !eventDate || !location || !imageUrl || !description) {
       return res.status(400).json({ message: "Please fill out all required fields." });
     }
 
@@ -43,7 +47,7 @@ app.post('/api/events', async (req, res) => {
       eventType,
       eventDate,
       location,
-      thumbnail,
+      imageUrl,
       description,
       userEmail: userEmail || "anonymous@carevision.com",
       createdAt: new Date(),
@@ -61,24 +65,37 @@ app.post('/api/events', async (req, res) => {
   }
 });
 
-app.get('/events', async(req, res) => {
-  const result = await eventsCollection.find().toArray()
-  res.send(result)
-})
+app.get('/events', async (req, res) => {
+  try {
+    const result = await eventsCollection.find().toArray();
+    res.send(result);
+  } catch (error) {
+    res.status(500).json({ message: "Error fetching events" });
+  }
+});
 
-app.get('/events/:id', async(req, res) => {
-  const {id} = req.params
-  const result = await eventsCollection.findOne({_id: new ObjectId(id)})
-
-  res.send(result)
-})
+app.get('/events/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await eventsCollection.findOne({ _id: new ObjectId(id) });
+    res.send(result);
+  } catch (error) {
+    res.status(500).json({ message: "Error fetching event details" });
+  }
+});
 
 app.get('/', (req, res) => {
-    res.send({ message: 'Server is running fine!' });
+  res.send({ message: 'Server is running fine!' });
 });
 
-connectToMongoDB().then(() => {
-  app.listen(PORT, () => {
-     console.log(`Server is running at http://localhost:${PORT}`);
+// Only listen locally if not running as a serverless function on Vercel
+if (process.env.NODE_ENV !== 'production') {
+  connectToMongoDB().then(() => {
+    app.listen(PORT, () => {
+       console.log(`Server is running at http://localhost:${PORT}`);
+    });
   });
-});
+}
+
+// Export app for Vercel serverless deployment
+export default app;
