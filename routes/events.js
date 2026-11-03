@@ -28,7 +28,7 @@ router.post('/:id/join', async (req, res) => {
       volunteers.push(userId);
       await eventsCollection.updateOne(
         { _id: new ObjectId(req.params.id) },
-        { $set: { volunteers } }
+       
       );
     }
 
