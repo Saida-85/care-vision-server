@@ -67,8 +67,8 @@ app.post('/jwt', (req, res) => {
   res.send({ token });
 });
 
-// Protected POST endpoint to save events to MongoDB (uses verifyToken)
-app.post('/api/events', verifyToken, async (req, res) => {
+// Protected POST endpoint to save events to MongoDB
+app.post('/api/events/manage', verifyToken, async (req, res) => {
   try {
     const { title, eventType, eventDate, location, imageUrl, description, userEmail } = req.body;
 
@@ -96,6 +96,28 @@ app.post('/api/events', verifyToken, async (req, res) => {
   } catch (error) {
     console.error("Error saving event:", error);
     res.status(500).json({ message: "Server error while saving event." });
+  }
+});
+
+// Protected DELETE endpoint to remove events
+app.delete('/api/events/manage', verifyToken, async (req, res) => {
+  try {
+    const { id } = req.query;
+
+    if (!id || !ObjectId.isValid(id)) {
+      return res.status(400).json({ message: "Valid event ID is required." });
+    }
+
+    const result = await eventsCollection.deleteOne({ _id: new ObjectId(id) });
+
+    if (result.deletedCount === 0) {
+      return res.status(404).json({ message: "Event not found." });
+    }
+
+    res.status(200).json({ message: "Event deleted successfully." });
+  } catch (error) {
+    console.error("Error deleting event:", error);
+    res.status(500).json({ message: "Server error while deleting event." });
   }
 });
 
