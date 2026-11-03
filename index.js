@@ -2,6 +2,7 @@ import express from 'express';
 import { MongoClient, ObjectId } from 'mongodb';
 import 'dotenv/config';
 import cors from 'cors';
+import jwt from 'jsonwebtoken';
 
 const app = express();
 const PORT = process.env.PORT || 8000;
@@ -27,14 +28,47 @@ async function connectToMongoDB() {
   }
 }
 
+// JWT Token Verification Middleware
+const verifyToken = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ message: "Unauthorized access: Missing JWT Token" });
+  }
+
+  const token = authHeader.split(' ')[1];
+
+  jwt.verify(token, process.env.JWT_SECRET || 'carevision_secure_jwt_secret_key_2026', (err, decoded) => {
+    if (err) {
+      return res.status(403).json({ message: "Forbidden access: Invalid or expired token" });
+    }
+    req.user = decoded;
+    next();
+  });
+};
+
 // Ensure database connects before handling incoming API routes on serverless
 app.use(async (req, res, next) => {
   await connectToMongoDB();
   next();
 });
 
-// POST endpoint to save events to MongoDB
-app.post('/api/events', async (req, res) => {
+// POST endpoint to issue JWT Token for client
+app.post('/jwt', (req, res) => {
+  const user = req.body;
+  if (!user?.email) {
+    return res.status(400).json({ message: "Email is required to issue token" });
+  }
+
+  const token = jwt.sign(user, process.env.JWT_SECRET || 'carevision_secure_jwt_secret_key_2026', {
+    expiresIn: '7d',
+  });
+
+  res.send({ token });
+});
+
+// Protected POST endpoint to save events to MongoDB (uses verifyToken)
+app.post('/api/events', verifyToken, async (req, res) => {
   try {
     const { title, eventType, eventDate, location, imageUrl, description, userEmail } = req.body;
 
@@ -49,7 +83,7 @@ app.post('/api/events', async (req, res) => {
       location,
       imageUrl,
       description,
-      userEmail: userEmail || "anonymous@carevision.com",
+      userEmail: req.user.email || userEmail || "anonymous@carevision.com",
       createdAt: new Date(),
     };
 
@@ -65,6 +99,7 @@ app.post('/api/events', async (req, res) => {
   }
 });
 
+// Public GET endpoint to list events
 app.get('/events', async (req, res) => {
   try {
     const result = await eventsCollection.find().toArray();
@@ -74,6 +109,7 @@ app.get('/events', async (req, res) => {
   }
 });
 
+// Public GET endpoint for single event details
 app.get('/events/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -92,7 +128,7 @@ app.get('/', (req, res) => {
 if (process.env.NODE_ENV !== 'production') {
   connectToMongoDB().then(() => {
     app.listen(PORT, () => {
-       console.log(`Server is running at http://localhost:${PORT}`);
+      console.log(`Server is running at http://localhost:${PORT}`);
     });
   });
 }
