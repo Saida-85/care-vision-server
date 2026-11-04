@@ -8,3 +8,4 @@ node_modules/
 # Logs & System files
 npm-debug.log*
 .DS_Store
+.vercel

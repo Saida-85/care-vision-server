@@ -12,6 +12,7 @@ app.use(
   cors({
     origin: [
       process.env.CLIENT_URL,
+      "https://care-vision-three.vercel.app",
       "http://localhost:3000"
     ],
     credentials: true,
@@ -129,23 +130,31 @@ app.delete('/api/events/manage', verifyToken, async (req, res) => {
   }
 });
 
-// Public GET endpoint to list events
-app.get('/events', async (req, res) => {
+// Public GET endpoint to list events (Fixed with /api/ prefix)
+app.get('/api/events', async (req, res) => {
   try {
     const result = await eventsCollection.find().toArray();
     res.send(result);
   } catch (error) {
+    console.error("Error fetching events:", error);
     res.status(500).json({ message: "Error fetching events" });
   }
 });
 
-// Public GET endpoint for single event details
-app.get('/events/:id', async (req, res) => {
+// Public GET endpoint for single event details (Fixed with /api/ prefix)
+app.get('/api/events/:id', async (req, res) => {
   try {
     const { id } = req.params;
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({ message: "Invalid event ID format" });
+    }
     const result = await eventsCollection.findOne({ _id: new ObjectId(id) });
+    if (!result) {
+      return res.status(404).json({ message: "Event not found" });
+    }
     res.send(result);
   } catch (error) {
+    console.error("Error fetching event details:", error);
     res.status(500).json({ message: "Error fetching event details" });
   }
 });
