@@ -14,19 +14,25 @@ app.use(
       process.env.CLIENT_URL,
       "https://care-vision-three.vercel.app",
       "http://localhost:3000"
-    ],
+    ].filter(Boolean), // drop undefined when CLIENT_URL isn't set
     credentials: true,
   })
 );
 app.use(express.json());
 
-const client = new MongoClient(process.env.MONGODB_URI);
+if (!process.env.MONGODB_URI) {
+  console.error("MONGODB_URI is not set. Add it to the server's environment variables.");
+}
+
+const client = process.env.MONGODB_URI
+  ? new MongoClient(process.env.MONGODB_URI)
+  : null;
 
 let db;
 let eventsCollection;
 
 async function connectToMongoDB() {
-  if (db) return; // Re-use connection if already established
+  if (db || !client) return; // Re-use connection if already established
   try {
     await client.connect();
     db = client.db("carevision");
@@ -59,6 +65,10 @@ const verifyToken = (req, res, next) => {
 // Ensure database connects before handling incoming API routes on serverless
 app.use(async (req, res, next) => {
   await connectToMongoDB();
+
+  if (!eventsCollection && req.path !== '/') {
+    return res.status(503).json({ message: "Database unavailable. Check MONGODB_URI and Atlas network access." });
+  }
   next();
 });
 
@@ -130,10 +140,17 @@ app.delete('/api/events/manage', verifyToken, async (req, res) => {
   }
 });
 
-// Public GET endpoint to list events (Fixed with /api/ prefix)
+// Public GET endpoint to list upcoming events (Filtered by date & sorted newest first)
 app.get('/api/events', async (req, res) => {
   try {
-    const result = await eventsCollection.find().toArray();
+    const today = new Date().toISOString().split("T")[0]; // "YYYY-MM-DD" format
+
+    // Only fetch upcoming events (today or later) and sort by newest creation
+    const result = await eventsCollection
+      .find({ eventDate: { $gte: today } })
+      .sort({ _id: -1 })
+      .toArray();
+
     res.send(result);
   } catch (error) {
     console.error("Error fetching events:", error);
@@ -141,7 +158,7 @@ app.get('/api/events', async (req, res) => {
   }
 });
 
-// Public GET endpoint for single event details (Fixed with /api/ prefix)
+// Public GET endpoint for single event details
 app.get('/api/events/:id', async (req, res) => {
   try {
     const { id } = req.params;
