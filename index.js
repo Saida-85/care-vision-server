@@ -7,8 +7,16 @@ import jwt from 'jsonwebtoken';
 const app = express();
 const PORT = process.env.PORT || 8000;
 
-// Mandatory Middleware
-app.use(cors());
+// Mandatory Middleware with dynamic CLIENT_URL support
+app.use(
+  cors({
+    origin: [
+      process.env.CLIENT_URL,
+      "http://localhost:3000"
+    ],
+    credentials: true,
+  })
+);
 app.use(express.json());
 
 const client = new MongoClient(process.env.MONGODB_URI);
